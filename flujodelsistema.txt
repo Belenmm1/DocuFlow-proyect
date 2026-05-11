@@ -1,0 +1,52 @@
+docuflow/
+│
+├── app/
+│   ├── __init__.py
+│   ├── main.py                  # Entry point de FastAPI
+│   ├── config.py                # Variables de entorno y settings
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── v1/
+│   │       ├── __init__.py
+│   │       └── routes/
+│   │           ├── __init__.py
+│   │           └── documents.py # Endpoints de documentos
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── extractor.py         # Lógica de extracción por tipo de archivo
+│   │   ├── ai_analyzer.py       # LangChain + OpenAI
+│   │   └── report_generator.py  # Exportación de reportes
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── database.py          # Conexión SQLAlchemy + sesión
+│   │   └── document.py          # Modelo ORM de Document
+│   │
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   └── document.py          # Pydantic schemas (request/response)
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── file_handler.py      # Validación y guardado de archivos
+│       └── logger.py            # Configuración de logging
+│
+├── streamlit_app/
+│   ├── __init__.py
+│   └── app.py                   # Interfaz visual Streamlit
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_extractor.py
+│   ├── test_ai_analyzer.py
+│   └── test_routes.py
+│
+├── uploads/                     # Archivos temporales subidos (gitignored)
+├── .env                         # Variables de entorno (gitignored)
+├── .env.example                 # Template de variables
+├── .gitignore
+├── requirements.txt
+├── Procfile                     # Para Railway: web: uvicorn app.main:app
+└── README.md
