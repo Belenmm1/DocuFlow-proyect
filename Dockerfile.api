@@ -1,0 +1,51 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dockerfile.api — DocuFlow API + Worker + Beat (Bloque 7.1)
+#
+# Agrega postgresql-client para que scripts/backup.sh pueda ejecutar pg_dump
+# desde dentro del contenedor api/worker.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+FROM python:3.11-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    libmagic1 \
+    libffi-dev \
+    libxml2-dev \
+    libxslt-dev \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# ─── deps ───────────────────────────────────────────────────────────────────
+FROM base AS deps
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# ─── production ─────────────────────────────────────────────────────────────
+FROM base AS production
+
+COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+RUN groupadd -r docuflow && useradd -r -g docuflow -s /bin/bash docuflow
+
+COPY . .
+
+RUN mkdir -p uploads vector_stores backups \
+    && chmod +x scripts/backup.sh scripts/restore.sh 2>/dev/null || true \
+    && chown -R docuflow:docuflow /app
+
+USER docuflow
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

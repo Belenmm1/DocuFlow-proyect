@@ -1,0 +1,68 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dockerfile.frontend — DocuFlow Frontend (Next.js 14)
+#
+# Stages:
+#   deps        — node_modules
+#   builder     — next build
+#   production  — imagen mínima con el standalone output
+# ═══════════════════════════════════════════════════════════════════════════════
+
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+# Copiar manifests primero para aprovechar cache de Docker
+COPY package.json package-lock.json* ./
+
+RUN npm ci --only=production --ignore-scripts
+
+# ─────────────────────────────────────────────────────────────
+# Stage: builder
+# ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Build args para variables que Next.js incrusta en el bundle
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXTAUTH_URL=http://localhost:3000
+
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXTAUTH_URL=$NEXTAUTH_URL \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_ENV=production
+
+# Instalar todas las dependencias (incluyendo devDeps para el build)
+COPY package.json package-lock.json* ./
+RUN npm ci --ignore-scripts
+
+COPY . .
+
+# Construir con output standalone para imágenes más pequeñas
+RUN npm run build
+
+# ─────────────────────────────────────────────────────────────
+# Stage: production
+# ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS production
+
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+# Usuario sin privilegios
+RUN addgroup --system nextjs && adduser --system --ingroup nextjs nextjs
+
+# Copiar solo el output standalone (mucho más liviano)
+COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/public ./public
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

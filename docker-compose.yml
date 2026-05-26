@@ -1,0 +1,205 @@
+version: "3.9"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DocuFlow — Docker Compose completo (Bloque 7.1)
+#
+# Servicios:
+#   api        — FastAPI (uvicorn)
+#   worker     — Celery worker (cola "documents")
+#   beat       — Celery Beat (tareas periódicas: backups, limpieza)
+#   redis      — Broker + backend de Celery + caché
+#   db         — PostgreSQL 16
+#   frontend   — Next.js 14
+#
+# Uso:
+#   cp .env.example .env     # completar con valores reales
+#   docker compose up -d
+#   docker compose logs -f api
+# ═══════════════════════════════════════════════════════════════════════════════
+
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+    target: production
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  networks:
+    - docuflow
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL 16
+  # ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: docuflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-docuflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-docuflow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"   # exponer solo en dev; comentar en prod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docuflow} -d ${POSTGRES_DB:-docuflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - docuflow
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis 7 — broker + backend + caché
+  # ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: docuflow-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"   # exponer solo en dev; comentar en prod
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - docuflow
+
+  # ─────────────────────────────────────────────────────────────
+  # API — FastAPI + Uvicorn
+  # ─────────────────────────────────────────────────────────────
+  api:
+    <<: *api-common
+    container_name: docuflow-api
+    command: >
+      sh -c "
+        echo '⏳ Esperando DB...' &&
+        python -c 'import time, psycopg2, os; [time.sleep(2) or psycopg2.connect(os.environ[\"DATABASE_URL\"]) for _ in range(10)]' || true &&
+        echo '🔄 Ejecutando migraciones...' &&
+        alembic upgrade head &&
+        echo '🚀 Iniciando API...' &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2} --log-level ${LOG_LEVEL:-info}
+      "
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - uploads_data:/app/uploads
+      - vector_stores:/app/vector_stores
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────────
+  # Worker — Celery (cola "documents")
+  # ─────────────────────────────────────────────────────────────
+  worker:
+    <<: *api-common
+    container_name: docuflow-worker
+    command: >
+      celery -A app.workers.celery_app worker
+        --loglevel=${LOG_LEVEL:-info}
+        --queues=documents
+        --concurrency=${CELERY_CONCURRENCY:-2}
+        --max-tasks-per-child=50
+        --hostname=worker@%h
+    volumes:
+      - uploads_data:/app/uploads
+      - vector_stores:/app/vector_stores
+      - backups_data:/app/backups          # Bloque 7.4 — backups persistentes
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────────────────────
+  # Beat — Celery Beat (tareas programadas)
+  # ─────────────────────────────────────────────────────────────
+  beat:
+    <<: *api-common
+    container_name: docuflow-beat
+    command: >
+      celery -A app.workers.celery_app beat
+        --loglevel=${LOG_LEVEL:-info}
+        --scheduler celery.beat.PersistentScheduler
+        --schedule /tmp/celerybeat-schedule
+    depends_on:
+      worker:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────────────────────
+  # Frontend — Next.js 14
+  # ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+    container_name: docuflow-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8000}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - docuflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# ─────────────────────────────────────────────────────────────
+# Volúmenes persistentes
+# ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads_data:
+    driver: local
+  vector_stores:
+    driver: local
+  backups_data:          # Bloque 7.4 — backups de PostgreSQL
+    driver: local
+
+# ─────────────────────────────────────────────────────────────
+# Red interna
+# ─────────────────────────────────────────────────────────────
+networks:
+  docuflow:
+    driver: bridge

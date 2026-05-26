@@ -187,6 +187,57 @@ async def get_cache_info():
     return info
 
 
+@router.get("/stats/activity", summary="Actividad diaria de documentos")
+def get_activity(days: int = 14, db: Session = Depends(get_db)):
+    """
+    Devuelve la cantidad de documentos creados por día en los últimos N días.
+    Usado por el gráfico de actividad en el dashboard frontend.
+
+    Respuesta:
+      points: [{date: "YYYY-MM-DD", count: int, label: "dd/MM"}, ...]
+      total:  int (suma total del período)
+      days:   int (días solicitados)
+    """
+    from datetime import timedelta, date as date_type
+    from sqlalchemy import cast, Date as SADate
+
+    if days < 1:
+        days = 1
+    if days > 90:
+        days = 90
+
+    end_date = date_type.today()
+    start_date = end_date - timedelta(days=days - 1)
+
+    # Aggregate counts per day using SQLAlchemy
+    rows = (
+        db.query(
+            cast(Document.created_at, SADate).label("day"),
+            func.count(Document.id).label("count"),
+        )
+        .filter(Document.created_at >= datetime.combine(start_date, datetime.min.time()))
+        .group_by(cast(Document.created_at, SADate))
+        .order_by(cast(Document.created_at, SADate))
+        .all()
+    )
+
+    counts_by_day = {str(row.day): row.count for row in rows}
+
+    points = []
+    current = start_date
+    while current <= end_date:
+        day_str = current.strftime("%Y-%m-%d")
+        points.append({
+            "date": day_str,
+            "count": counts_by_day.get(day_str, 0),
+            "label": current.strftime("%d/%m"),
+        })
+        current += timedelta(days=1)
+
+    total = sum(p["count"] for p in points)
+    return {"points": points, "total": total, "days": days}
+
+
 @router.get("/{doc_id}", response_model=DocumentOut, summary="Detalle de documento")
 def get_report(doc_id: str, db: Session = Depends(get_db)):
     """Devuelve todos los campos de un documento, incluyendo el análisis IA."""

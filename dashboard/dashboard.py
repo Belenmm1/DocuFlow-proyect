@@ -221,36 +221,36 @@ if items:
         col_xl, col_pdf, col_json = st.columns(3)
 
         with col_xl:
-            if st.button("⬇️ Descargar Excel"):
+            if st.button("⬇ Descargar Excel"):
                 with st.spinner("Generando Excel…"):
                     xlsx = download_export(selected_id, "excel")
                 if xlsx:
                     st.download_button(
-                        "📥 Guardar .xlsx",
+                        " Guardar .xlsx",
                         data=xlsx,
                         file_name=f"docuflow_{selected_id[:8]}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
 
         with col_pdf:
-            if st.button("⬇️ Descargar PDF"):
+            if st.button("⬇ Descargar PDF"):
                 with st.spinner("Generando PDF…"):
                     pdf = download_export(selected_id, "pdf")
                 if pdf:
                     st.download_button(
-                        "📥 Guardar .pdf",
+                        " Guardar .pdf",
                         data=pdf,
                         file_name=f"docuflow_{selected_id[:8]}.pdf",
                         mime="application/pdf",
                     )
 
         with col_json:
-            if st.button("⬇️ Descargar JSON"):
+            if st.button("⬇ Descargar JSON"):
                 with st.spinner("Generando JSON…"):
                     raw = download_export(selected_id, "json")
                 if raw:
                     st.download_button(
-                        "📥 Guardar .json",
+                        " Guardar .json",
                         data=raw,
                         file_name=f"docuflow_{selected_id[:8]}.json",
                         mime="application/json",

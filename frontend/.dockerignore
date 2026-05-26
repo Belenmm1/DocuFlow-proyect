@@ -1,0 +1,11 @@
+# frontend/.dockerignore
+
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+*.md
+.git/
+.github/
+.vscode/

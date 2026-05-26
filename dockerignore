@@ -1,0 +1,42 @@
+# .dockerignore — API
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Datos locales (no van en la imagen; se montan como volumen)
+uploads/
+backups/
+vector_stores/
+*.db
+*.sqlite
+
+# Dev / CI
+.env
+.env.*
+!.env.example
+.git/
+.github/
+*.md
+tests/
+htmlcov/
+.coverage
+
+# Frontend (se construye en su propia imagen)
+frontend/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp

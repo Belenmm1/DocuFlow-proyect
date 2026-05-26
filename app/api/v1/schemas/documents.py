@@ -26,6 +26,9 @@ class DocumentListItem(BaseModel):
     sentiment: Optional[str]
     keywords: Optional[list]
     page_count: Optional[int]
+    # Bloque 3.2 — categoría detectada automáticamente
+    doc_category: Optional[str] = None
+    doc_category_confidence: Optional[str] = None
     # Snippet del texto extraído (máx 300 chars) para highlight en resultados de búsqueda
     extracted_text_snippet: Optional[str] = None
     created_at: datetime
@@ -47,6 +50,9 @@ class DocumentResponse(BaseModel):
     sentiment: Optional[str]
     keywords: Optional[list]
     page_count: Optional[int]
+    # Bloque 3.2 — categoría detectada automáticamente
+    doc_category: Optional[str] = None
+    doc_category_confidence: Optional[str] = None
     extracted_text: Optional[str]
     created_at: datetime
     updated_at: Optional[datetime]

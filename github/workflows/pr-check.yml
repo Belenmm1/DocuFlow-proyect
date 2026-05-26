@@ -1,0 +1,130 @@
+# .github/workflows/pr-check.yml
+#
+# Corre en cada PR hacia main o develop.
+# Más liviano que ci.yml: solo lint + test, sin build de Docker ni deploy.
+# Agrega un comentario en el PR con el resumen de coverage.
+
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint-and-test:
+    name: Lint + Test
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: test-secret-ci
+      JWT_SECRET_KEY: test-jwt-ci
+      OPENAI_API_KEY: sk-test-placeholder
+      APP_ENV: testing
+      UPLOAD_DIR: /tmp/docuflow_test_uploads
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: mkdir uploads
+        run: mkdir -p /tmp/docuflow_test_uploads
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Tests + coverage
+        id: coverage
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=json:coverage.json \
+            --cov-fail-under=70 \
+            -v --tb=short \
+            2>&1 | tee test_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Comentar coverage en el PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '## 📊 Reporte de Tests\n\n';
+
+            try {
+              const cov = JSON.parse(fs.readFileSync('coverage.json', 'utf8'));
+              const pct = cov.totals.percent_covered.toFixed(1);
+              const emoji = parseFloat(pct) >= 70 ? '✅' : '❌';
+              body += `**Coverage total: ${emoji} ${pct}%** (mínimo: 70%)\n\n`;
+
+              // Top 5 archivos con menor coverage
+              const files = Object.entries(cov.files)
+                .map(([f, d]) => ({ file: f, pct: d.summary.percent_covered }))
+                .sort((a, b) => a.pct - b.pct)
+                .slice(0, 5);
+
+              if (files.length > 0) {
+                body += '**Archivos con menor cobertura:**\n';
+                files.forEach(f => {
+                  body += `- \`${f.file}\`: ${f.pct.toFixed(0)}%\n`;
+                });
+              }
+            } catch(e) {
+              body += '_No se pudo parsear el reporte de coverage._\n';
+            }
+
+            // Buscar comentario anterior del bot y actualizarlo
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Reporte de Tests')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

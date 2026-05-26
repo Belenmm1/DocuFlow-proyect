@@ -29,6 +29,7 @@ from app.api.v1.schemas.documents import (
 )
 from app.api.v1.schemas.pagination import CursorPage, DocumentFilters
 from app.core.cache import cache_invalidate_document
+from app.services.rag_service import rag_service   # Bloque 3.1
 from app.core.pagination import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -277,6 +278,7 @@ async def delete_document(
         celery_app.control.revoke(doc.task_id, terminate=True)
 
     await cache_invalidate_document(doc_id)
+    rag_service.invalidate_index(doc_id)           # Bloque 3.1 — elimina índice FAISS
 
     db.delete(doc)
     db.commit()

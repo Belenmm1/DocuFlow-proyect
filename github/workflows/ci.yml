@@ -1,0 +1,190 @@
+# .github/workflows/ci.yml
+#
+# Pipeline CI/CD de DocuFlow
+#
+# Stages:
+#   1. lint    — ruff (formato + linting)
+#   2. test    — pytest con coverage ≥ 70 %
+#   3. build   — docker build (valida que las imágenes compilan)
+#   4. deploy  — railway up (solo en push a main)
+#
+# Secrets requeridos en GitHub → Settings → Secrets and variables → Actions:
+#   RAILWAY_TOKEN        → token de tu proyecto Railway
+#   SECRET_KEY           → valor de producción
+#   OPENAI_API_KEY       → para tests de integración (opcional, se mockea)
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. LINT
+  # ─────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint — check errores
+        run: ruff check .
+
+      - name: Lint — check formato
+        run: ruff format --check .
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. TEST
+  # ─────────────────────────────────────────────────────────────
+  test:
+    name: Tests (pytest + coverage)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # SQLite en memoria para tests (sin PostgreSQL)
+      DATABASE_URL: sqlite:///./test.db
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: test-secret-key-only-for-ci-not-production
+      JWT_SECRET_KEY: test-jwt-secret-key-only-for-ci
+      OPENAI_API_KEY: sk-test-placeholder
+      APP_ENV: testing
+      UPLOAD_DIR: /tmp/docuflow_test_uploads
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx
+
+      - name: Crear directorio de uploads para tests
+        run: mkdir -p /tmp/docuflow_test_uploads
+
+      - name: Ejecutar tests
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=70 \
+            -v \
+            --tb=short
+
+      - name: Subir reporte de coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. BUILD
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: test
+    # Solo en push (no en PRs, para no gastar minutos de CI)
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build imagen API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          target: production
+          push: false
+          tags: docuflow-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build imagen Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.frontend
+          target: production
+          push: false
+          tags: docuflow-frontend:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.docuflow.app
+            NEXTAUTH_URL=https://docuflow.app
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────────────────────
+  # 4. DEPLOY → Railway (solo main)
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy a Railway
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy API
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service api --detach
+
+      - name: Deploy Frontend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service frontend --detach
+
+      - name: Notificar resultado
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          echo "Deploy finalizado con estado: $STATUS"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"

@@ -1,40 +1,33 @@
-# Framework
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-python-multipart==0.0.9
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+alembic
+psycopg2-binary          # ← ACTIVADO para Docker / producción (antes comentado)
+pydantic-settings
+langchain
+langchain-openai
+openai
+pypdf
+python-docx
+openpyxl
+reportlab
+xlsxwriter
+streamlit
+passlib[bcrypt]
+python-jose[cryptography]
+slowapi
+celery[redis]
+redis
+kombu
+langchain-anthropic
+anthropic
+langchain-google-genai
+google-generativeai
+langchain-ollama
+httpx
+stripe>=8.0.0
+# Bloque 7.1 — backup automático (pg_dump viene con postgresql-client en la imagen)
 
-# Database
-sqlalchemy==2.0.29
-alembic==1.13.1
-
-# Settings
-pydantic-settings==2.2.1
-
-# AI
-langchain==0.1.16
-langchain-openai==0.1.3
-openai==1.23.2
-
-# Document extraction
-pypdf==4.2.0
-python-docx==1.1.0
-openpyxl==3.1.2
-
-# Reports
-reportlab==4.1.0
-xlsxwriter==3.1.9
-
-# Dashboard
-streamlit==1.33.0
-
-# Auth (Bloque 1.1)
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
-
-# Rate limiting (Bloque 1.2)
-slowapi==0.1.9
-
-# --- NUEVAS EN 2.1 ---
-celery[redis]==5.3.6
-redis==5.0.1
-kombu==5.3.4
+# Bloque 7.3 — Observabilidad
+sentry-sdk[fastapi]      # tracking de errores en producción

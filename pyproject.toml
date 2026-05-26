@@ -1,0 +1,73 @@
+# pyproject.toml
+# Configuración unificada para ruff (linter/formatter) y pytest
+
+# ─────────────────────────────────────────────────────────────
+# Ruff — linter + formatter
+# ─────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (manejado por formatter)
+    "B008",  # do not perform function calls in default arguments (común en FastAPI)
+    "UP007", # Use X | Y for union types (compatibilidad Python 3.9)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401", "F811"]   # imports no usados y redefiniciones en tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ─────────────────────────────────────────────────────────────
+# Pytest
+# ─────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: tests lentos que pueden saltarse con -m 'not slow'",
+    "integration: tests que requieren servicios externos",
+]
+
+# ─────────────────────────────────────────────────────────────
+# Coverage
+# ─────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/workers/scheduled_tasks.py",  # depende de scripts externos
+    "app/services/integrations/*",     # OAuth2 externo, difícil de testear sin mocks complejos
+    "app/dashboard/*",                 # Streamlit legacy
+    "*/migrations/*",
+    "*/alembic/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "pass",
+]
+show_missing = true

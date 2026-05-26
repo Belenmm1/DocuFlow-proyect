@@ -151,3 +151,29 @@ def save_upload(content: bytes, doc_id: str, file_type: str) -> str:
     dest.write_bytes(content)
     logger.debug(f"Archivo guardado: {dest}")
     return str(dest)
+
+
+class FileHandler:
+    """Wrapper de conveniencia para validación + guardado de uploads."""
+
+    async def save(self, file) -> dict:
+        """Guarda un UploadFile de FastAPI y retorna metadata."""
+        content = await file.read()
+        ext = Path(file.filename).suffix.lower().lstrip(".")
+        if ext not in ("pdf", "docx", "xlsx"):
+            raise HTTPException(status_code=415, detail=f"Extensión no soportada: .{ext}")
+        validate_file(content, ext)
+        safe_name = sanitize_filename(file.filename)
+        import uuid
+        uid = str(uuid.uuid4())
+        file_path = save_upload(content, uid, ext)
+        return {
+            "filename":  safe_name,
+            "file_path": file_path,
+            "file_type": ext,
+            "file_size": len(content),
+        }
+
+    def save_bytes(self, content: bytes, uid: str, file_type: str) -> str:
+        """Guarda bytes directamente (usado por integraciones externas)."""
+        return save_upload(content, uid, file_type)

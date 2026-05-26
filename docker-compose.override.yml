@@ -1,0 +1,65 @@
+# docker-compose.override.yml
+#
+# Sobreescrituras para desarrollo local.
+# Docker Compose lo aplica automáticamente sobre docker-compose.yml.
+# NO commitear con credenciales reales.
+#
+# En producción simplemente no copiar este archivo.
+
+version: "3.9"
+
+services:
+  api:
+    # En dev: hot-reload con watchfiles
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+      "
+    volumes:
+      # Montar el código fuente para hot-reload
+      - .:/app
+      - uploads_data:/app/uploads
+      - vector_stores:/app/vector_stores
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: debug
+      APP_ENV: development
+
+  worker:
+    command: >
+      celery -A app.workers.celery_app worker
+        --loglevel=debug
+        --queues=documents
+        --concurrency=1
+        --pool=solo
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads
+      - vector_stores:/app/vector_stores
+
+  beat:
+    volumes:
+      - .:/app
+
+  frontend:
+    # En dev: Next.js en modo desarrollo con hot-reload
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      target: deps        # solo instala deps, no hace build
+    command: npm run dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # evita sobreescribir node_modules del container
+    environment:
+      NODE_ENV: development
+
+  # En dev: exponer postgres y redis directamente al host
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
