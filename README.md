@@ -253,7 +253,7 @@ CI requires ≥ 70% coverage to pass.
 
 ---
 
-## 🤖 AI Analysis Output
+## AI Analysis Output
 
 Every processed document returns a structured JSON object:
 
