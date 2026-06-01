@@ -140,18 +140,18 @@ export default function StatsCards() {
           sub="Todos los tiempos"
         />
         <StatCard
-          label="Procesados"
-          value={stats.done}
+          label="Procesados hoy"
+          value={stats.today ?? 0}
           icon={CheckCircle}
           colorClass="emerald"
           sub={`${successRate}% tasa de éxito`}
         />
         <StatCard
-          label="En cola"
-          value={stats.pending + stats.processing}
+          label="Tiempo promedio"
+          value={stats.avg_processing_time ? `${stats.avg_processing_time}s` : '—'}
           icon={Clock}
           colorClass="amber"
-          sub="Pendiente + procesando"
+          sub="Por documento"
         />
         <StatCard
           label="Con errores"
@@ -250,6 +250,41 @@ export default function StatsCards() {
             ))}
           </div>
         </div>
+
+        {/* Category breakdown */}
+        {stats.by_category && Object.keys(stats.by_category).length > 0 && (
+          <div className="df-card p-5">
+            <p className="text-xs font-mono uppercase tracking-widest mb-1" style={{ color: 'var(--df-muted)' }}>
+              Por categoría
+            </p>
+            <p className="text-sm font-semibold mb-3" style={{ color: 'var(--df-text)' }}>
+              Distribución IA
+            </p>
+            <div className="space-y-2">
+              {Object.entries(stats.by_category)
+                .sort(([,a],[,b]) => (b as number) - (a as number))
+                .slice(0, 6)
+                .map(([cat, count]) => {
+                  const pct = stats.total > 0 ? Math.round(((count as number) / stats.total) * 100) : 0
+                  return (
+                    <div key={cat}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="capitalize" style={{ color: 'var(--df-muted)' }}>{cat}</span>
+                        <span className="font-mono" style={{ color: 'var(--df-text)' }}>{count as number}</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-[#1e2d40]">
+                        <div
+                          className="h-1 rounded-full bg-gradient-to-r from-[#00c2ff] to-[#a855f7]"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })
+              }
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

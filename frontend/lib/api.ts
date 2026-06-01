@@ -126,10 +126,52 @@ export async function sendChatMessage(
   return data
 }
 
+/** Alias normalizado — el campo de respuesta se expone como `response` */
+export async function chatWithDocument(
+  docId: number,
+  message: string,
+  conversationId?: string
+): Promise<{ response: string; conversation_id?: string }> {
+  const data = await sendChatMessage(docId, message, conversationId)
+  // El backend puede devolver `answer` o `response` según versión
+  return {
+    response: (data as any).response ?? (data as any).answer ?? '',
+    conversation_id: data.conversation_id,
+  }
+}
+
 export async function fetchChatHistory(
   docId: number,
   conversationId: string
 ): Promise<{ conversation_id: string; history: ChatMessage[] }> {
   const { data } = await api.get(`/documents/${docId}/chat/${conversationId}`)
+  return data
+}
+
+// ── Reprocess ─────────────────────────────────────────────────────────────────
+export async function reprocessDocument(id: number): Promise<Document> {
+  const { data } = await api.post(`/documents/${id}/reprocess`)
+  return data
+}
+
+// ── Compare ───────────────────────────────────────────────────────────────────
+export async function compareDocuments(
+  docId1: number,
+  docId2: number
+): Promise<{
+  doc_1: { id: number; filename: string }
+  doc_2: { id: number; filename: string }
+  comparison: {
+    cambios_agregados: string[]
+    cambios_eliminados: string[]
+    cambios_modificados: { original: string; nuevo: string }[]
+    resumen_cambios: string
+    impacto: 'alto' | 'medio' | 'bajo'
+    recomendacion: string
+  }
+}> {
+  const { data } = await api.post('/documents/compare', null, {
+    params: { doc_id_1: docId1, doc_id_2: docId2 },
+  })
   return data
 }

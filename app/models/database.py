@@ -11,9 +11,9 @@ Cambios respecto al bloque anterior:
 """
 
 import enum
-from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Enum as SAEnum, ForeignKey
+from sqlalchemy.sql import func
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.pool import NullPool
@@ -94,8 +94,8 @@ class Document(Base):
     sentiment = Column(String(32), nullable=True)
     keywords = Column(JSON, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=func.now, index=True)
+    updated_at = Column(DateTime(timezone=True), default=func.now, onupdate=func.now)
 
     # Bloque 1.1 — Auth
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)

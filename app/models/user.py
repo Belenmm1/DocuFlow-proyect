@@ -6,7 +6,7 @@ Bloque 6.1 — se agrega relationship "subscription" al modelo User.
 
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, String
+from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -27,13 +27,15 @@ class UserPlan(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id              = Column(String, primary_key=True, index=True)
-    email           = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    role            = Column(SAEnum(UserRole), default=UserRole.USER,  nullable=False)
-    plan            = Column(SAEnum(UserPlan), default=UserPlan.FREE,  nullable=False)
-    is_active       = Column(Boolean, default=True, nullable=False)
-    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    id                  = Column(String, primary_key=True, index=True)
+    email               = Column(String, unique=True, index=True, nullable=False)
+    hashed_password     = Column(String, nullable=False)
+    role                = Column(SAEnum(UserRole), default=UserRole.USER,  nullable=False)
+    plan                = Column(SAEnum(UserPlan), default=UserPlan.FREE,  nullable=False)
+    is_active           = Column(Boolean, default=True, nullable=False)
+    created_at          = Column(DateTime(timezone=True), server_default=func.now())
+    # Plan limits — se resetea el 1ro de cada mes vía scheduled_tasks
+    monthly_docs_count  = Column(Integer, default=0, nullable=False)
 
     documents    = relationship("Document",      back_populates="owner",  lazy="dynamic")
     webhooks     = relationship("WebhookConfig", back_populates="owner",

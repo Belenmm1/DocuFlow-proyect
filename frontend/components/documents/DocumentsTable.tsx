@@ -7,8 +7,8 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import { TableRowSkeleton } from '@/components/ui/Skeleton'
 import { Trash2, Download, MessageSquare, Eye, ChevronLeft, ChevronRight, Search, SlidersHorizontal, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { formatDistanceToNow, format } from 'date-fns'
+import { es, enUS } from 'date-fns/locale'
 import Link from 'next/link'
 import clsx from 'clsx'
 
@@ -214,7 +214,7 @@ export default function DocumentsTable({ refreshKey }: Props) {
                       }
                     </td>
                     <td className="px-4 py-3 text-xs text-[#5a7a96] font-mono whitespace-nowrap">
-                      {formatDistanceToNow(new Date(doc.created_at), { locale: es, addSuffix: true })}
+                      {formatDistanceToNow(new Date(doc.created_at), { locale: typeof window !== 'undefined' && localStorage.getItem('docuflow_locale') === 'en' ? enUS : es, addSuffix: true })}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

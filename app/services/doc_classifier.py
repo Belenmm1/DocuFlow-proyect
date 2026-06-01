@@ -1,42 +1,24 @@
 """
-app/services/doc_classifier.py — Bloque 3.2
+app/services/doc_classifier.py — Bloque 3.2 + Mejoras v2.0
 
 Clasificador automático de tipo de documento.
 
-Responsabilidades:
-  1. Detectar la categoría del documento antes del análisis principal.
-  2. Retornar el prompt especializado que corresponde a esa categoría.
-
-Categorías soportadas:
-  contrato      → contratos, acuerdos, convenios, términos y condiciones
-  factura       → facturas, recibos, notas de débito/crédito, comprobantes
-  informe       → reportes, informes técnicos, memorandos, actas
-  cv            → currículums, perfiles profesionales, hojas de vida
-  resolucion    → resoluciones, decretos, ordenanzas, disposiciones
-  presentacion  → presentaciones, propuestas comerciales, pitches
-  academico     → tesis, papers, artículos científicos, trabajos universitarios
-  legal         → escrituras, poderes notariales, demandas, sentencias
-  medico        → historias clínicas, estudios, recetas, informes médicos
-  otro          → documentos que no encajan en ninguna categoría anterior
-
-Arquitectura de dos pasos:
-  Paso 1 — Clasificación rápida (max_tokens=100):
-    Un prompt liviano que solo pide la categoría en JSON.
-    Usa los primeros 2000 caracteres del texto para velocidad.
-
-  Paso 2 — Análisis especializado (max_tokens=1500):
-    El prompt de análisis se personaliza según la categoría detectada,
-    extrayendo campos específicos relevantes para ese tipo de documento.
+Mejoras v2.0:
+  - Usa get_fast_llm() / get_llm() en lugar de ChatOpenAI hardcodeado
+    → ahora funciona con cualquier LLM_PROVIDER (openai, anthropic, gemini, ollama)
+  - Prompts especializados enriquecidos con campos adicionales por categoría
+  - Soporte multiidioma: si idioma=="en" usa SPECIALIZED_PROMPTS_EN
+  - max_tokens de análisis aumentado a 2500
 """
 
 import json
 import logging
 from typing import Any, Dict, Tuple
 
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings
+from app.core.llm_provider import get_fast_llm, get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +55,9 @@ Categorías disponibles:
   otro         → cualquier documento que no encaje en las categorías anteriores
 
 Formato de respuesta obligatorio:
-{"categoria": "<una de las categorías de arriba>", "confianza": "<alta|media|baja>", "razon": "<una oración breve>"}"""
+{"categoria": "<una de las categorías de arriba>", "confianza": "<alta|media|baja>", "razon": "<una oración breve>", "idioma": "<es|en|otro>"}"""
 
-# ── Prompts especializados por categoría ──────────────────────────────────────
+# ── Prompts especializados por categoría (Español) ────────────────────────────
 
 SPECIALIZED_PROMPTS: Dict[str, str] = {
 
@@ -90,7 +72,12 @@ Analizá el contrato y respondé SOLO con este JSON (sin markdown):
     "fecha_fin": "fecha o null",
     "monto": "valor económico o null",
     "obligaciones_clave": ["obligación 1", "obligación 2"],
-    "clausulas_importantes": ["cláusula rescisión", "penalidades", etc],
+    "clausulas_importantes": ["cláusula rescisión", "penalidades"],
+    "riesgos_identificados": ["cláusula abusiva X", "penalidad excesiva Y"],
+    "jurisdiccion": "jurisdicción aplicable o null",
+    "ley_aplicable": "ley o código aplicable o null",
+    "renovacion_automatica": true,
+    "rescision_anticipada": "condiciones o null",
     "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
     "sentimiento": "positivo | negativo | neutro",
     "idioma": "es | en | otro",
@@ -111,6 +98,12 @@ Analizá la factura y respondé SOLO con este JSON (sin markdown):
     "impuestos": "monto de impuestos o null",
     "total": "monto total o null",
     "moneda": "ARS | USD | EUR | otra",
+    "condiciones_pago": "contado | 30 días | 60 días | otro",
+    "estado_pago": "pagado | pendiente | vencido | null",
+    "numero_orden_compra": "número o null",
+    "cuit_emisor": "CUIT/RUC o null",
+    "cuit_receptor": "CUIT/RUC o null",
+    "alertas": ["item con precio inusual", "fecha vencida"],
     "items": [{"descripcion": "...", "cantidad": "...", "precio": "..."}],
     "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
     "sentimiento": "neutro",
@@ -146,6 +139,11 @@ Analizá el CV y respondé SOLO con este JSON (sin markdown):
     "ubicacion": "ciudad/país o null",
     "titulo_actual": "cargo o título más reciente",
     "experiencia_anos": "años estimados de experiencia o null",
+    "nivel_senioridad": "junior | semi-senior | senior | lead | gerencial",
+    "disponibilidad": "inmediata | 15 días | 30 días | null",
+    "pretension_salarial": "monto o null",
+    "ultima_empresa": "nombre o null",
+    "score_perfil": 7,
     "habilidades_tecnicas": ["skill 1", "skill 2"],
     "habilidades_blandas": ["habilidad 1"],
     "idiomas": ["idioma 1", "idioma 2"],
@@ -202,8 +200,12 @@ Analizá el documento académico y respondé SOLO con este JSON (sin markdown):
     "institucion": "institución o null",
     "ano": "año de publicación o null",
     "area_conocimiento": "disciplina o campo de estudio",
+    "tipo_trabajo": "tesis | paper | tesina | monografia | otro",
+    "nivel": "grado | posgrado | doctorado | investigacion",
     "hipotesis": "hipótesis o pregunta de investigación o null",
     "metodologia": "metodología utilizada o null",
+    "referencias_count": 45,
+    "aporte_original": "descripción del aporte original al campo",
     "conclusiones": ["conclusión 1", "conclusión 2"],
     "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
     "sentimiento": "neutro",
@@ -241,7 +243,11 @@ Analizá el documento médico y respondé SOLO con este JSON (sin markdown):
     "diagnostico": "diagnóstico principal o null",
     "tratamiento": "tratamiento indicado o null",
     "medicamentos": ["medicamento 1", "medicamento 2"],
+    "alergias": ["alergia 1"],
+    "antecedentes": ["antecedente 1"],
     "estudios_solicitados": ["estudio 1"],
+    "proxima_consulta": "fecha o null",
+    "urgencia": "alta | media | baja | null",
     "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
     "sentimiento": "neutro",
     "idioma": "es | en | otro",
@@ -261,6 +267,138 @@ Analizá el documento y respondé SOLO con este JSON (sin markdown):
 }""",
 }
 
+# ── Prompts especializados por categoría (English) ────────────────────────────
+
+SPECIALIZED_PROMPTS_EN: Dict[str, str] = {
+
+    "contrato": """You are an expert contract analysis lawyer.
+Analyze the contract and respond ONLY with this JSON (no markdown):
+{
+    "resumen": "description of the contract object in 2-3 sentences",
+    "tipo_documento": "contrato",
+    "partes": ["party 1", "party 2"],
+    "objeto": "main purpose of the contract",
+    "fecha_inicio": "date or null",
+    "fecha_fin": "date or null",
+    "monto": "economic value or null",
+    "obligaciones_clave": ["obligation 1", "obligation 2"],
+    "clausulas_importantes": ["termination clause", "penalties"],
+    "riesgos_identificados": ["abusive clause X", "excessive penalty Y"],
+    "jurisdiccion": "applicable jurisdiction or null",
+    "ley_aplicable": "applicable law or code or null",
+    "renovacion_automatica": true,
+    "rescision_anticipada": "conditions or null",
+    "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
+    "sentimiento": "positive | negative | neutral",
+    "idioma": "en",
+    "palabras_clave": ["kw1", "kw2", "kw3"]
+}""",
+
+    "factura": """You are an expert accountant in fiscal documents.
+Analyze the invoice and respond ONLY with this JSON (no markdown):
+{
+    "resumen": "description of the transaction in 1-2 sentences",
+    "tipo_documento": "factura",
+    "emisor": "issuer name",
+    "receptor": "recipient name",
+    "numero_factura": "number or null",
+    "fecha_emision": "date or null",
+    "fecha_vencimiento": "due date or null",
+    "subtotal": "amount without taxes or null",
+    "impuestos": "tax amount or null",
+    "total": "total amount or null",
+    "moneda": "ARS | USD | EUR | other",
+    "condiciones_pago": "cash | 30 days | 60 days | other",
+    "estado_pago": "paid | pending | overdue | null",
+    "numero_orden_compra": "number or null",
+    "cuit_emisor": "TAX ID or null",
+    "cuit_receptor": "TAX ID or null",
+    "alertas": ["unusual item price", "overdue date"],
+    "items": [{"descripcion": "...", "cantidad": "...", "precio": "..."}],
+    "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
+    "sentimiento": "neutral",
+    "idioma": "en",
+    "palabras_clave": ["kw1", "kw2", "kw3"]
+}""",
+
+    "cv": """You are an expert recruiter in professional profile analysis.
+Analyze the CV and respond ONLY with this JSON (no markdown):
+{
+    "resumen": "professional profile in 2-3 sentences",
+    "tipo_documento": "cv",
+    "nombre": "full name or null",
+    "email": "email or null",
+    "telefono": "phone or null",
+    "ubicacion": "city/country or null",
+    "titulo_actual": "most recent role or title",
+    "experiencia_anos": "estimated years of experience or null",
+    "nivel_senioridad": "junior | mid | senior | lead | manager",
+    "disponibilidad": "immediate | 2 weeks | 1 month | null",
+    "pretension_salarial": "amount or null",
+    "ultima_empresa": "name or null",
+    "score_perfil": 7,
+    "habilidades_tecnicas": ["skill 1", "skill 2"],
+    "habilidades_blandas": ["soft skill 1"],
+    "idiomas": ["language 1", "language 2"],
+    "educacion": [{"titulo": "...", "institucion": "...", "ano": "..."}],
+    "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
+    "sentimiento": "positive",
+    "idioma": "en",
+    "palabras_clave": ["kw1", "kw2", "kw3"]
+}""",
+
+    "medico": """You are an expert physician in clinical documentation.
+Analyze the medical document and respond ONLY with this JSON (no markdown):
+{
+    "resumen": "clinical summary in 2-3 sentences",
+    "tipo_documento": "medico",
+    "tipo_documento_medico": "medical_record | study | prescription | report | other",
+    "paciente": "name or 'anonymized'",
+    "medico": "professional name or null",
+    "fecha": "date or null",
+    "diagnostico": "main diagnosis or null",
+    "tratamiento": "indicated treatment or null",
+    "medicamentos": ["medication 1", "medication 2"],
+    "alergias": ["allergy 1"],
+    "antecedentes": ["background 1"],
+    "estudios_solicitados": ["study 1"],
+    "proxima_consulta": "date or null",
+    "urgencia": "high | medium | low | null",
+    "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
+    "sentimiento": "neutral",
+    "idioma": "en",
+    "palabras_clave": ["kw1", "kw2", "kw3"]
+}""",
+
+    "academico": """You are an academic expert in scientific research.
+Analyze the academic document and respond ONLY with this JSON (no markdown):
+{
+    "resumen": "abstract or synthesis in 2-3 sentences",
+    "tipo_documento": "academico",
+    "titulo": "work title",
+    "autores": ["author 1", "author 2"],
+    "institucion": "institution or null",
+    "ano": "publication year or null",
+    "area_conocimiento": "discipline or field of study",
+    "tipo_trabajo": "thesis | paper | dissertation | monograph | other",
+    "nivel": "undergraduate | graduate | doctoral | research",
+    "hipotesis": "hypothesis or research question or null",
+    "metodologia": "methodology used or null",
+    "referencias_count": 45,
+    "aporte_original": "description of the original contribution to the field",
+    "conclusiones": ["conclusion 1", "conclusion 2"],
+    "entidades": {"personas": [], "organizaciones": [], "fechas": [], "montos": []},
+    "sentimiento": "neutral",
+    "idioma": "en",
+    "palabras_clave": ["kw1", "kw2", "kw3"]
+}""",
+}
+
+# Fill in English prompts with Spanish fallback for categories not yet translated
+for cat, prompt in SPECIALIZED_PROMPTS.items():
+    if cat not in SPECIALIZED_PROMPTS_EN:
+        SPECIALIZED_PROMPTS_EN[cat] = prompt
+
 
 # ── Servicio ──────────────────────────────────────────────────────────────────
 
@@ -268,20 +406,15 @@ class DocClassifier:
     """
     Clasifica un documento en una categoría y retorna el prompt especializado.
 
-    Uso típico (en tasks.py):
-        classifier = DocClassifier()
-        category, confidence, prompt = await classifier.classify(text)
-        # usar prompt en el análisis principal
+    Mejoras v2.0:
+      - Usa get_fast_llm() del llm_provider → compatible con todos los proveedores
+      - Detecta idioma en clasificación y usa prompts en el idioma del documento
     """
 
     def __init__(self):
-        # Modelo liviano para clasificación (rápido y barato)
-        self.llm_fast = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=settings.OPENAI_API_KEY,
-            temperature=0,
-            max_tokens=120,
-        )
+        # CORRECCIÓN: usar get_fast_llm() en lugar de ChatOpenAI hardcodeado
+        # → funciona con openai, anthropic, gemini y ollama según .env
+        self.llm_fast = get_fast_llm(temperature=0.0, max_tokens=150)
 
     async def classify(self, text: str) -> Tuple[str, str, str]:
         """
@@ -292,9 +425,7 @@ class DocClassifier:
 
         Returns:
             Tuple (categoria, confianza, prompt_especializado)
-            donde categoria ∈ VALID_CATEGORIES, confianza ∈ {alta, media, baja}
         """
-        # Solo los primeros 2000 chars son suficientes para clasificar
         sample = text[:2000].strip()
 
         messages = [
@@ -317,6 +448,7 @@ class DocClassifier:
             category = result.get("categoria", "otro").lower().strip()
             confidence = result.get("confianza", "baja").lower().strip()
             reason = result.get("razon", "")
+            idioma = result.get("idioma", "es").lower().strip()
 
             # Validar categoría
             if category not in VALID_CATEGORIES:
@@ -327,15 +459,23 @@ class DocClassifier:
 
             logger.info(
                 f"Documento clasificado como '{category}' "
-                f"(confianza={confidence}) — {reason}"
+                f"(confianza={confidence}, idioma={idioma}) — {reason}"
             )
 
-            return category, confidence, SPECIALIZED_PROMPTS[category]
+            # Seleccionar prompt en el idioma del documento
+            if idioma == "en":
+                prompt = SPECIALIZED_PROMPTS_EN.get(category, SPECIALIZED_PROMPTS_EN["otro"])
+            else:
+                prompt = SPECIALIZED_PROMPTS.get(category, SPECIALIZED_PROMPTS["otro"])
+
+            return category, confidence, prompt
 
         except (json.JSONDecodeError, Exception) as e:
             logger.error(f"Error en clasificación: {e} — usando categoría 'otro'")
             return "otro", "baja", SPECIALIZED_PROMPTS["otro"]
 
-    def get_prompt_for_category(self, category: str) -> str:
-        """Retorna el prompt especializado para una categoría conocida."""
+    def get_prompt_for_category(self, category: str, idioma: str = "es") -> str:
+        """Retorna el prompt especializado para una categoría y idioma conocidos."""
+        if idioma == "en":
+            return SPECIALIZED_PROMPTS_EN.get(category, SPECIALIZED_PROMPTS_EN["otro"])
         return SPECIALIZED_PROMPTS.get(category, SPECIALIZED_PROMPTS["otro"])

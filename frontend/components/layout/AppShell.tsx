@@ -7,9 +7,10 @@ import {
   LayoutDashboard, FileText, LogOut, Zap,
   ChevronDown, User, Sun, Moon
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import { useTheme } from '@/lib/theme'
+import { getLocale, setLocale, type Locale } from '@/lib/i18n'
 
 const NAV = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -18,6 +19,20 @@ const NAV = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [locale, setLocaleState] = useState<Locale>('es')
+
+  useEffect(() => {
+    setLocaleState(getLocale())
+    const handler = () => setLocaleState(getLocale())
+    window.addEventListener('locale-change', handler)
+    return () => window.removeEventListener('locale-change', handler)
+  }, [])
+
+  const toggleLocale = () => {
+    const next: Locale = locale === 'es' ? 'en' : 'es'
+    setLocale(next)
+    setLocaleState(next)
+  }
   const { data: session } = useSession()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { theme, toggle } = useTheme()
@@ -64,6 +79,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
             </div>
+
+            {/* Locale toggle */}
+            <button
+              onClick={toggleLocale}
+              title={locale === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+              className="w-auto px-2 h-7 rounded-md flex items-center justify-center transition-colors text-[10px] font-bold font-mono tracking-widest"
+              style={{ color: 'var(--df-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(128,128,128,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              {locale === 'es' ? 'ES' : 'EN'}
+            </button>
 
             {/* Theme toggle */}
             <button

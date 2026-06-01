@@ -65,6 +65,9 @@ export interface Stats {
   failed: number
   by_type: Record<string, number>
   avg_pages: number
+  today?: number
+  avg_processing_time?: number
+  by_category?: Record<string, number>
 }
 
 export interface ActivityPoint {

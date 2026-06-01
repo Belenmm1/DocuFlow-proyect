@@ -194,7 +194,7 @@ def _build_llm(
 
 # ── API pública ───────────────────────────────────────────────────────────────
 
-def get_llm(temperature: float = 0.1, max_tokens: int = 1500) -> BaseChatModel:
+def get_llm(temperature: float = 0.1, max_tokens: int = 2500) -> BaseChatModel:
     """
     Retorna el modelo principal configurado para análisis de documentos.
     Usa LLM_PROVIDER + LLM_MODEL (o el default del proveedor).

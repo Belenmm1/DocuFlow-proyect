@@ -99,15 +99,39 @@ def _build_stats(db: Session) -> dict:
 
     success_rate = round((done / total * 100), 1) if total else 0.0
 
+    # Tiempo promedio de procesamiento (en segundos)
+    avg_time_result = (
+        db.query(func.avg(
+            func.extract('epoch', Document.updated_at) - func.extract('epoch', Document.created_at)
+        ))
+        .filter(Document.status == DocumentStatus.DONE)
+        .scalar()
+    )
+    avg_processing_time = round(float(avg_time_result), 1) if avg_time_result else None
+
+    # Distribución por categoría IA
+    category_counts = (
+        db.query(Document.doc_category, func.count(Document.id).label("count"))
+        .filter(Document.doc_category.isnot(None))
+        .group_by(Document.doc_category)
+        .all()
+    )
+
     return {
-        "total_documents": total,
-        "done": done,
-        "failed": failed,
-        "pending": pending,
-        "processed_today": processed_today,
-        "success_rate": success_rate,
-        "total_entities": total_entities,
-        "by_file_type": {row.file_type: row.count for row in type_counts},
+        "total":                 total,
+        "total_documents":       total,  # alias para compatibilidad
+        "done":                  done,
+        "failed":                failed,
+        "pending":               pending,
+        "processing":            db.query(Document).filter(Document.status == DocumentStatus.PROCESSING).count(),
+        "processed_today":       processed_today,
+        "today":                 processed_today,  # alias para frontend
+        "success_rate":          success_rate,
+        "total_entities":        total_entities,
+        "by_type":               {row.file_type: row.count for row in type_counts},
+        "by_file_type":          {row.file_type: row.count for row in type_counts},
+        "avg_processing_time":   avg_processing_time,
+        "by_category":           {row.doc_category: row.count for row in category_counts},
     }
 
 

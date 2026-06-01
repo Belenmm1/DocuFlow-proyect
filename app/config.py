@@ -139,9 +139,17 @@ class Settings(BaseSettings):
         """True si la URL apunta a PostgreSQL (no SQLite)."""
         return self.DATABASE_URL.startswith("postgresql")
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Timezone — Mejoras v2.0
+    # ──────────────────────────────────────────────────────────────────────────
+    # Usada para mostrar fechas en la zona horaria correcta en logs y exports.
+    # El frontend usa la timezone del navegador directamente (date-fns).
+    TIMEZONE: str = "America/Argentina/Buenos_Aires"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"   # variables del .env no declaradas aquí no rompen el arranque
 
 
 settings = Settings()
