@@ -1,7 +1,7 @@
 """bloque_2_3_indexes
 
 Revision ID: 2b3c4d5e6f7a
-Revises: 2a1b3c4d5e6f
+Revises: 0008
 Create Date: 2024-01-01 00:00:00
 
 Bloque 2.3 — Paginación y Búsqueda:
@@ -27,7 +27,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = "2b3c4d5e6f7a"
-down_revision = "2a1b3c4d5e6f"   # ← apunta a la migración del Bloque 2.1/2.2
+down_revision = "0008"   # ← apunta a la migración del Bloque 2.1/2.2
 branch_labels = None
 depends_on = None
 
