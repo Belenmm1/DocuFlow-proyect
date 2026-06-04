@@ -1,0 +1,20 @@
+# frontend/railway.toml — DocuFlow Frontend
+#
+# NOTA: Railway debe configurarse con Root Directory = / (raíz del repo)
+# NO usar /frontend como root directory porque el Dockerfile está en la raíz.
+#
+# En Railway dashboard para el servicio frontend:
+#   Settings → Source → Root Directory: / (vacío = raíz)
+#   Settings → Build → Dockerfile Path: Dockerfile.frontend
+#   Settings → Deploy → Start Command: node server.js
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.frontend"
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

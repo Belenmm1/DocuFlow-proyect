@@ -33,7 +33,6 @@ htmlcov/
 .coverage
 
 # Frontend (se construye en su propia imagen)
-frontend/
 node_modules/
 
 # IDE

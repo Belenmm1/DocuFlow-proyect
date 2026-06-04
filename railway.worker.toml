@@ -1,0 +1,15 @@
+# railway.worker.toml — DocuFlow Worker
+# 
+# En Railway dashboard: Settings → Config as Code → apuntar a este archivo
+# O configurar manualmente:
+#   Build → Dockerfile Path: Dockerfile.api
+#   Deploy → Start Command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 -Q documents
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.api"
+
+[deploy]
+startCommand = "celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 -Q documents"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

@@ -1,5 +1,7 @@
-".env" 
+.env 
 "uploads/" 
 "__pycache__/" 
 "*.pyc" 
-".env" 
+
+!.env.example
+!.env.railway

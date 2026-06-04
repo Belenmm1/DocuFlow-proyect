@@ -1,0 +1,21 @@
+# railway.toml — DocuFlow API
+# https://docs.railway.app/reference/config-as-code
+#
+# Este archivo configura el servicio API.
+# Worker y Frontend se configuran desde el dashboard Railway
+# apuntando al mismo repo con sus respectivos Dockerfiles.
+#
+# En el dashboard Railway, para cada servicio adicional:
+#   Settings → Build → Dockerfile Path → Dockerfile.api (worker) o Dockerfile.frontend
+#   Settings → Deploy → Start Command → ver DEPLOY.md
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.api"
+
+[deploy]
+startCommand = "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

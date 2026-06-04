@@ -31,3 +31,7 @@ stripe>=8.0.0
 
 # Bloque 7.3 — Observabilidad
 sentry-sdk[fastapi]      # tracking de errores en producción
+
+# OCR para PDFs escaneados
+pytesseract==0.3.10
+pdf2image==1.17.0

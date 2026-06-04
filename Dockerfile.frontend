@@ -1,29 +1,26 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dockerfile.frontend — DocuFlow Frontend (Next.js 14)
 #
-# Stages:
-#   deps        — node_modules
-#   builder     — next build
-#   production  — imagen mínima con el standalone output
+# Build context: raíz del repo (donde está railway.toml)
+# El código del frontend vive en /frontend/
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# ─── Stage: deps ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# Copiar manifests primero para aprovechar cache de Docker
-COPY package.json package-lock.json* ./
+# Copiar solo los manifests del frontend para aprovechar cache
+COPY frontend/package.json frontend/package-lock.json* ./
 
-RUN npm ci --only=production --ignore-scripts
+RUN npm ci --ignore-scripts
 
-# ─────────────────────────────────────────────────────────────
-# Stage: builder
-# ─────────────────────────────────────────────────────────────
+# ─── Stage: builder ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Build args para variables que Next.js incrusta en el bundle
+# Build args para variables que Next.js incrusta en el bundle en build time
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ARG NEXTAUTH_URL=http://localhost:3000
 
@@ -32,18 +29,16 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 
-# Instalar todas las dependencias (incluyendo devDeps para el build)
-COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts
+# Copiar node_modules del stage anterior
+COPY --from=deps /app/node_modules ./node_modules
 
-COPY . .
+# Copiar todo el código del frontend
+COPY frontend/ .
 
-# Construir con output standalone para imágenes más pequeñas
+# Build con output standalone
 RUN npm run build
 
-# ─────────────────────────────────────────────────────────────
-# Stage: production
-# ─────────────────────────────────────────────────────────────
+# ─── Stage: production ────────────────────────────────────────────────────────
 FROM node:20-alpine AS production
 
 RUN apk add --no-cache curl
@@ -51,18 +46,18 @@ RUN apk add --no-cache curl
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000
 
-# Usuario sin privilegios
 RUN addgroup --system nextjs && adduser --system --ingroup nextjs nextjs
 
-# Copiar solo el output standalone (mucho más liviano)
 COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nextjs /app/public ./public
+COPY --from=builder --chown=nextjs:nextjs /app/.next/static    ./.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/public          ./public
 
 USER nextjs
 
 EXPOSE 3000
 
+# Railway inyecta $PORT — Next.js standalone lo lee automáticamente
 CMD ["node", "server.js"]
