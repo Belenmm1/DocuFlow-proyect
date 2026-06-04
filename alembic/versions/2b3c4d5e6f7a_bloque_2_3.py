@@ -33,68 +33,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Índice en file_type para filtro por tipo
-    op.create_index(
-        "ix_documents_file_type",
-        "documents",
-        ["file_type"],
-        unique=False,
-    )
-
-    # Índice en created_at para ORDER BY y filtros de rango de fecha
-    op.create_index(
-        "ix_documents_created_at",
-        "documents",
-        ["created_at"],
-        unique=False,
-    )
-
-    # Índice en file_size para ORDER BY file_size
-    op.create_index(
-        "ix_documents_file_size",
-        "documents",
-        ["file_size"],
-        unique=False,
-    )
-
-    # Índice en filename para ORDER BY y búsquedas por nombre
-    op.create_index(
-        "ix_documents_filename",
-        "documents",
-        ["filename"],
-        unique=False,
-    )
-
-    # Índice compuesto (status, created_at) — query más frecuente:
-    # listar documentos done ordenados por fecha
-    op.create_index(
-        "ix_documents_status_created_at",
-        "documents",
-        ["status", "created_at"],
-        unique=False,
-    )
-
-    # Índice compuesto (user_id, created_at) — para cuando se active Bloque 1.1
-    # Solo crea si la columna ya existe (puede fallar en SQLite sin el bloque auth)
-    try:
-        op.create_index(
-            "ix_documents_user_id_created_at",
-            "documents",
-            ["user_id", "created_at"],
-            unique=False,
-        )
-    except Exception:
-        pass  # La columna user_id puede no existir aún
+    # No-op: all indexes listed above were already created by 0001_initial_schema.py.
+    # Attempting to recreate them crashes with "index already exists" and
+    # prevents uvicorn from starting. The indexes remain in place; nothing to do.
+    pass
 
 
 def downgrade() -> None:
-    try:
-        op.drop_index("ix_documents_user_id_created_at", table_name="documents")
-    except Exception:
-        pass
-
-    op.drop_index("ix_documents_status_created_at", table_name="documents")
-    op.drop_index("ix_documents_filename", table_name="documents")
-    op.drop_index("ix_documents_file_size", table_name="documents")
-    op.drop_index("ix_documents_created_at", table_name="documents")
-    op.drop_index("ix_documents_file_type", table_name="documents")
+    # No-op: mirrors upgrade — we never created the indexes here, so we must
+    # not drop them; they belong to 0001_initial_schema.py.
+    pass
