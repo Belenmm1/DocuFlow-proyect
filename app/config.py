@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production"
 
+    # JWT — Bloque auth
+    JWT_SECRET_KEY: str = "change-me-in-production"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080"
 
