@@ -1,43 +1,64 @@
+# Web framework
 fastapi
 uvicorn[standard]
 python-multipart
+
+# Database
 sqlalchemy
 alembic
-psycopg2-binary          # ← ACTIVADO para Docker / producción (antes comentado)
+psycopg2-binary
+
+# Pydantic
 pydantic-settings
+pydantic[email]
+
+# Auth
+passlib[bcrypt]
+python-jose[cryptography]
+
+# LLM / LangChain
 langchain
+langchain-core
 langchain-openai
+langchain-anthropic
+langchain-google-genai
+langchain-ollama
+langchain-community
+langchain-text-splitters
 openai
+anthropic
+google-generativeai
+
+# Vector store
+faiss-cpu
+
+# Document processing
 pypdf
+pdfplumber
 python-docx
 openpyxl
 reportlab
 xlsxwriter
-streamlit
-passlib[bcrypt]
-python-jose[cryptography]
-slowapi
-celery[redis]
-redis
-kombu
-langchain-anthropic
-anthropic
-langchain-google-genai
-google-generativeai
-langchain-ollama
-httpx
-stripe>=8.0.0
-# Bloque 7.1 — backup automático (pg_dump viene con postgresql-client en la imagen)
-
-# Bloque 7.3 — Observabilidad
-sentry-sdk[fastapi]      # tracking de errores en producción
-
-# OCR para PDFs escaneados
 pytesseract==0.3.10
 pdf2image==1.17.0
 python-magic
-langchain-text-splitters
-langchain-community
-langchain-core
-pdfplumber
-faiss-cpu
+
+# Rate limiting
+slowapi
+
+# Task queue
+celery[redis]
+redis
+kombu
+
+# HTTP client
+httpx
+
+# Payments
+stripe>=8.0.0
+
+# Observability
+sentry-sdk[fastapi]
+
+# Misc
+streamlit
