@@ -15,7 +15,7 @@ dockerfilePath = "Dockerfile.api"
 
 [deploy]
 preDeployCommand = "alembic upgrade head"
-startCommand = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
